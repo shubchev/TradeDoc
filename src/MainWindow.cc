@@ -1,22 +1,9 @@
 ﻿#include "MainWindow.h"
 #include <inttypes.h>
 
-static const char *monthNames[] = {
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-};
+IMainWindow::IMainWindow(Array<uint8_t> &fontData)
+  : batchSettings(db), productSettings(db) {
 
-IMainWindow::IMainWindow() {
   if (!GL::init()) {
     throw RuntimeError("Failed to load GL");
   }
@@ -25,37 +12,77 @@ IMainWindow::IMainWindow() {
   GL::addListener(this);
   GL::clearColor(Color_Grey);
   GL::setWindowSize(1200, 600);
+  GL::maximizeWindow();
   GL::showWindow();
 
-  int i = 10000;
-  TradeDoc d;
-  d.date = ImDatePicker::getToday();
-  d.date.year--;
-  d.no = i++;
-  d.recipient = "Rec1";
-  database.add(d);
+  columnInfo = {
+    u8"№",
+    u8"Продукт",
+    u8"Бройка",
+    u8"1 бр.",
+    u8"Тегло/Обем",
+    u8"№ на партида",
+    u8"Годност",
+  };
 
-  d.no = i++;
-  d.recipient = "Rec1-1";
-  database.add(d);
-  d.no = i++;
-  d.date.day++;
-  d.recipient = "Rec1-2";
-  database.add(d);
+  db.printerSettings.batchLeadZero = db.batchLeadZero;
+  db.printerSettings.docNumLeadZero = db.docNumLeadZero;
+  db.printerSettings.init();
 
-  d.date = ImDatePicker::getToday();
-  d.no = i++;
-  d.date.day++;
-  d.recipient = "Rec2";
-  database.add(d);
+  if (!db.open("db.fzip")) {
+    throw RuntimeError(db.lastError);
+  }
 
-  d.date = ImDatePicker::getToday();
-  d.date.year++;
-  d.no = i++;
-  d.date.month++;
-  d.date.day--;
-  d.recipient = "Rec3";
-  database.add(d);
+  if (!db.loadAll()) {
+    throw RuntimeError(db.lastError);
+  }
+
+  db.docNumber = db.getMaxDocNo() + 1;
+
+
+          /*auto doc = &db.docs.begin()->second[0];
+          auto jobs = db.printerSettings.print({ doc }, false);
+
+          for (auto &job : jobs) {
+            job->wait(1000);
+          }
+          GL::notifyWindowClose();*/
+
+
+  /*if (db.batchTemplate.empty()) {
+    db.batchTemplate = {
+      IBatchTemplate::create(),
+    };
+    if (!db.saveBatches()) {
+      db.removeTmpWorkDir();
+      throw RuntimeError(db.lastError);
+    }
+  }
+
+  if (db.productTemplate.empty()) {
+    auto today = CalendarDate::today();
+    db.productTemplate = {
+      ProductTemplate(u8"Масло от Бял Трън   Ф.", TradeUnit(u8"л", 1.000f)),
+      ProductTemplate(u8"Масло от Бял Трън   Ф.", TradeUnit(u8"л", 0.500f)),
+      ProductTemplate(u8"Масло от Бял Трън   Ф.", TradeUnit(u8"л", 0.250f)),
+      ProductTemplate(u8"Масло от Бял Трън Н.Ф.", TradeUnit(u8"л", 0.750f)),
+      ProductTemplate(u8"Масло от Бял Трън Н.Ф.", TradeUnit(u8"л", 0.250f)),
+
+      ProductTemplate(u8"Брашно от Бял Трън", TradeUnit(u8"кг", 1.000f)),
+      ProductTemplate(u8"Брашно от Бял Трън", TradeUnit(u8"кг", 0.500f)),
+      ProductTemplate(u8"Брашно от Бял Трън", TradeUnit(u8"кг", 0.250f)),
+
+      ProductTemplate(u8"Тахан от Бял Трън", TradeUnit(u8"кг", 0.300f)),
+    };
+    for (auto &p : db.productTemplate) {
+      p.db = &db;
+      p.batch = db.batchTemplate[0];
+    }
+    if (!db.saveProducts()) {
+      db.removeTmpWorkDir();
+      throw RuntimeError(db.lastError);
+    }
+  }*/
 
   auto glInitGUI = [&] () {
     IMGUI_CHECKVERSION();
@@ -73,8 +100,10 @@ IMainWindow::IMainWindow() {
     glyphs.push_back(0x0);
 
     // TODO: load from resource file
-    io.Fonts->AddFontFromFileTTF("D:\\workspace\\SHGE\\resources\\fonts\\FreeMono.ttf", 20,
-                                 nullptr, glyphs.data());
+    io.Fonts->AddFontFromMemoryTTF(fontData.data(), (int)fontData.size(), 20,
+                                   nullptr, glyphs.data());
+    /*io.Fonts->AddFontFromFileTTF("D:\\workspace\\SHGE\\resources\\fonts\\FreeMono.ttf", 20,
+                                 nullptr, glyphs.data());*/
 
     //auto &style = ImGui::GetStyle();
     //style.Colors[ImGuiCol_WindowBg] = Color_Grey;
@@ -85,17 +114,16 @@ IMainWindow::IMainWindow() {
   };
   GL::exec(glInitGUI);
 
-  docDate = ImDatePicker::getToday();
+  db.docDate = CalendarDate::today();
 }
 
 IMainWindow::~IMainWindow() {
+  db.saveInfo();
+  db.close();
 }
 
-MainWindow IMainWindow::create() {
-  auto mw = MakeHandle(IMainWindow);
-  if (mw) {
-  }
-  return mw;
+MainWindow IMainWindow::create(Array<uint8_t> &fontData) {
+  return MakeHandle(IMainWindow, fontData);
 }
 
 
@@ -231,8 +259,10 @@ void IMainWindow::DockSpaceOverViewport() {
 void IMainWindow::render() {
   if (ImGui::BeginMainMenuBar()) {
     if (ImGui::BeginMenu("File")) {
-      if (ImGui::MenuItem("Open")) {
-
+      if (ImGui::MenuItem("Products")) {
+        openSettings = true;
+        productSettings.open();
+        batchSettings.open();
       }
       ImGui::Separator();
       if (ImGui::MenuItem("Exit")) {
@@ -240,203 +270,476 @@ void IMainWindow::render() {
       }
       ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("Settings")) {
+      if (ImGui::MenuItem("Print settings ...")) {
+        db.printerSettings.openSettings();
+      }
+      ImGui::Separator();
+
+      if (ImGui::BeginMenu("Leading zero")) {
+        int org = *db.docNumLeadZero;
+        if (ImGui::InputInt("Document number##LeadZero", db.docNumLeadZero.get(), 1, 1)) {
+          *db.docNumLeadZero = clamp(*db.docNumLeadZero, 0, 9);
+          if (*db.docNumLeadZero != org && !db.saveInfo()) {
+            *db.docNumLeadZero = org;
+          }
+        }
+        org = *db.batchLeadZero;
+        if (ImGui::InputInt("Batch number##LeadZero", db.batchLeadZero.get(), 1, 1)) {
+          *db.batchLeadZero = clamp(*db.batchLeadZero, 0, 9);
+          if (*db.batchLeadZero != org && !db.saveInfo()) {
+            *db.batchLeadZero = org;
+          }
+        }
+        ImGui::EndMenu();
+      }
+      if (ImGui::MenuItem("Theme")) {
+
+      }
+
+
+      ImGui::EndMenu();
+    }
   }
   ImGui::EndMainMenuBar();
 
   DockSpaceOverViewport();
 
-  auto menuBarSize = ImGui::GetItemRectSize();
-
-  if (ImGui::Begin("Database##dbViewWin")) {
-    renderDatabase();
-  }
-  ImGui::End();
-
-
-  if (ImGui::Begin("New##mainWin")) {
-    ImGui::Text(u8"№"); ImGui::SameLine(150);
-    if (isDocNumberEdited) {
-      auto ret = docNumberEdit.render("##docNumEdit");
-      if (ret) {
-        docNumber = std::atoll(docNumberEdit.getText().c_str());
-        isDocNumberEdited = false;
-      } else if (!docNumberEdit.hasFocus() || ret) {
-        isDocNumberEdited = false;
-      }
+  renderNewDoc();
+  renderDatabase();
+  renderSettings();
+  db.printerSettings.renderSettings();
+  for (auto it = docView.begin(); it != docView.end();) {
+    if (!it->second.isOpen()) {
+      it = docView.erase(it);
     } else {
-      char fmt[10];
-      SPRINTF(fmt, "%%0%dd", docNumLeadZero);
-      ImGui::Text(fmt, docNumber);
-      if (ImGui::IsItemHovered()) {
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-          isDocNumberEdited = true;
-          docNumberEdit.setFormat(ImTextFieldFormat::PositiveInteger);
-          docNumberEdit.focus();
-          docNumberEdit.setText("%" PRId64, docNumber);
-        } else {
-          ImGui::BeginTooltip();
-          ImGui::Text("Double click to change.\nPress ENTER to accept new number");
-          ImGui::EndTooltip();
-        }
-      }
+      it->second.render();
+      it++;
     }
-
-    ImGui::Text(u8"Дата"); ImGui::SameLine(150);
-    if (isDocDateEdited) {
-      //ImGui::SetNextItemWidth(200);
-      auto res = docDatePicker.render("##date");
-      if (res == ImDatePickerResult::NewSel) {
-        docDate = docDatePicker.getSelection();
-        docDatePicker.close();
-        isDocDateEdited = false;
-      } else if (res == ImDatePickerResult::Cancel) {
-        docDatePicker.close();
-        isDocDateEdited = false;
-      }
-    } else {
-      ImGui::Text("%02d %s %04d",
-                  docDate.day, ImDatePicker::getShortMonthName(docDate), docDate.year);
-      if (ImGui::IsItemHovered()) {
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-          docDatePicker.open();
-          isDocDateEdited = true;
-        } else {
-          ImGui::BeginTooltip();
-          ImGui::Text("Double click to change");
-          ImGui::EndTooltip();
-        }
-      }
-    }
-   
-
-
-    ImGui::Text(u8"Получател"); ImGui::SameLine(150);
-    static char receiver[1024] = { 0 };
-    ImGui::SetNextItemWidth(450);
-    ImGui::InputText("##recv", receiver, sizeof(receiver));
-
-    ImGui::Separator();
-
-
-    class ColumnInfo {
-    public:
-      String name;
-      int type = 0; // 0 label, 1 int, 2 float, 3 date
-      int dataSource = -1; // 0 - auto inc, N - tableN, -1 editable
-    };
-
-    std::vector<ColumnInfo> columnInfo = {
-      { u8"№", 0, 0 },
-      { u8"Продукт", 0, 1 },
-      { u8"Тегло", 2, -1 },
-      { u8"№ на партида", 1, -1 },
-      { u8"Годност", 3, -1 },
-    };
-
-
-    Map<int, Array<String>> dataSource = {
-      { 0,
-        {
-          u8"Масло от Бял Трън   Ф. - 1.000 л.",
-          u8"Масло от Бял Трън   Ф. - 0.500 л.",
-          u8"Масло от Бял Трън   Ф. - 0.250 л.",
-          u8"Масло от Бял Трън Н.Ф. - 0.750 л.",
-          u8"Масло от Бял Трън Н.Ф. - 0.250 л.",
-
-          u8"Брашно от Бял Трън     - 1.000 кг.",
-          u8"Брашно от Бял Трън     - 0.500 кг.",
-          u8"Брашно от Бял Трън     - 0.250 кг.",
-
-          u8"Тахан от Бял Трън      - 0.300 кг.",
-        }
-      },
-    };
-
-    int Nx = 5;
-    ImGuiTableFlags tbflags = ImGuiTableFlags_SizingFixedFit |
-                              ImGuiTableFlags_RowBg |
-                              ImGuiTableFlags_Borders;
-    if (ImGui::BeginTable("##newDocTable", Nx, tbflags)) {
-      ImGui::TableSetupColumn("No", ImGuiTableColumnFlags_WidthFixed);
-      ImGui::TableSetupColumn("No1", ImGuiTableColumnFlags_WidthFixed);
-      ImGui::TableSetupColumn("No2", ImGuiTableColumnFlags_WidthFixed);
-
-      int Ny = 12 + 1;
-      for (int j = 0; j < Ny; j++) {
-        ImGui::TableNextRow();
-        for (int i = 0; i < Nx; i++) {
-          ImGui::TableNextColumn();
-
-          auto strId = toString(j) + "x" + toString(i);
-          if (j > 0) {
-            if (i == 0) {
-              ImGui::Text("%d", j);
-            } else if (i == 1) {
-              if (j - 1 < (int)dataSource[0].size()) ImGui::Text(dataSource[0][j - 1].c_str());
-            } else if (i == 2) {
-              ImGui::SetNextItemWidth(100);
-              docProdTextField[j - 1][i].setFormat(ImTextFieldFormat::PositiveNumber);
-              docProdTextField[j - 1][i].render("##dataedit" + strId);
-            } else if (i == 3) {
-              ImGui::SetNextItemWidth(100);
-              docProdTextField[j - 1][i].setFormat(ImTextFieldFormat::PositiveInteger);
-              docProdTextField[j - 1][i].render("##dataedit" + strId);
-            } else if (i == 4) {
-              //ImGui::SetNextItemWidth(100);
-              docProdValidity[j - 1][i].render("##dataedit" + strId);
-            }
-          } else {
-            ImGui::TextColored(Color_Red, columnInfo[i].name.c_str());
-          }
-
-        }
-      }
-      ImGui::EndTable();
-    }
-
-
-
-
   }
-  ImGui::End();
 
+  static bool focusNewWin = false;
+  if (!focusNewWin) {
+    ImGui::FocusWindow(ImGui::FindWindowByName("New##mainWin"));
+    receiverEdit.focus();
+    focusNewWin = true;
+  }
 }
 
+void renderDateEntry(const char *label,
+                     const CalendarDate &date,
+                     const CalendarDate &today,
+                     const Color &cTextColor,
+                     ImDatePicker *picker) {
+  ImGui::SetNextItemWidth(100);
+  auto dDays = date.daysSince(today);
+  if (picker) {
+    if (dDays <= 7) {
+      if (dDays < 0) picker->setButtonTextColor(Color_Red);
+      else picker->setButtonTextColor(Color_Yellow);
+    } else picker->setButtonTextColor(cTextColor);
+    picker->render(label);
+  } else {
+    auto ds = date.str(DateFormat::SNamedDMY);
+    if (dDays <= 7) {
+      if (dDays < 0) ImGui::TextColored(Color_Red, ds.c_str());
+      else ImGui::TextColored(Color_Yellow, ds.c_str());
+    } else ImGui::Text(ds.c_str());
+  }
+  if (dDays <= 7) {
+    if (ImGui::IsItemHovered()) {
+      ImGui::BeginTooltip();
+      if (dDays < 0) ImGui::Text(u8"Изтекъл срок");
+      else ImGui::Text(u8"Соркът изтича след < 7 дни");
+      ImGui::EndTooltip();
+    }
+  }
+}
+
+void IMainWindow::renderNewDoc() {
+  Scope winSG([] { ImGui::End(); });
+  if (!ImGui::Begin("New##mainWin")) {
+    return;
+  }
+
+  ImGui::Text(u8"№"); ImGui::SameLine(150);
+  if (isDocNumberEdited) {
+    int64_t step = 1, newV = docNumberEdit;
+    char fmt[10];
+    SPRINTF(fmt, "%%0%dd", *db.docNumLeadZero);
+    ImGui::InputScalar("##docNumEdit", ImGuiDataType_S64, &newV,
+                       &step, &step, fmt);
+    if (newV != docNumberEdit) {
+      auto dt = (newV - docNumberEdit > 0) ? 1 : -1;
+      bool found = false;
+      while (1) {
+        if (newV < 0) break;
+        if (!db.hasDocNo(newV)) { found = true; break; }
+        newV += dt;
+      }
+      if (found) docNumberEdit = newV;
+    }
+    docNumberEdit = max(docNumberEdit, 0ll);
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+      if (docNumberEdit >= 0 && !db.hasDocNo(docNumberEdit)) {
+        db.docNumber = docNumberEdit;
+      }
+      isDocNumberEdited = false;
+    }
+  } else {
+    char fmt[10];
+    SPRINTF(fmt, "%%0%dd", *db.docNumLeadZero);
+    ImGui::Text(fmt, db.docNumber);
+    if (ImGui::IsItemHovered()) {
+      if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        isDocNumberEdited = true;
+        docNumberEdit = db.docNumber;
+      } else {
+        ImGui::BeginTooltip();
+        ImGui::Text("Double click to change.\nPress ENTER to accept new number");
+        ImGui::EndTooltip();
+      }
+    }
+  }
+
+  ImGui::Text(u8"Дата"); ImGui::SameLine(150);
+  if (isDocDateEdited) {
+    //ImGui::SetNextItemWidth(200);
+    auto res = docDatePicker.render("dateToday");
+    if (res == ImDatePickerResult::NewSel) {
+      db.docDate = docDatePicker.getSelection();
+      isDocDateEdited = false;
+    } else if (res == ImDatePickerResult::Cancel) {
+      isDocDateEdited = false;
+    }
+  } else {
+    ImGui::Text(db.docDate.str(DateFormat::SNamedDMY).c_str());
+    if (ImGui::IsItemHovered()) {
+      if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        docDatePicker.open();
+        isDocDateEdited = true;
+      } else {
+        ImGui::BeginTooltip();
+        ImGui::Text("Double click to change");
+        ImGui::EndTooltip();
+      }
+    }
+  }
+
+
+
+  ImGui::Text(u8"Получател"); ImGui::SameLine(150);
+  ImGui::SetNextItemWidth(450);
+  receiverEdit.render("##recv");
+
+  ImGui::Separator();
+
+
+  auto today = CalendarDate::today();
+  bool allowSave = true;
+
+  int Nx = (int)columnInfo.size();
+  ImGuiTableFlags tbflags = ImGuiTableFlags_SizingFixedFit |
+                            ImGuiTableFlags_RowBg |
+                            ImGuiTableFlags_Borders;
+  if (ImGui::BeginTable("##newDocTable", Nx, tbflags)) {
+    for (int i = 0; i < Nx; i++) {
+      char tmp[32];
+      SPRINTF(tmp, "DTNo%d", i);
+      if (i == 1) ImGui::TableSetupColumn(tmp, ImGuiTableColumnFlags_WidthStretch);
+      else ImGui::TableSetupColumn(tmp, ImGuiTableColumnFlags_WidthFixed);
+    }
+
+    char editFmt[16];
+    SPRINTF(editFmt, "%%0%dd", *db.batchLeadZero);
+
+    for (int j = -1; j < (int)db.productTemplate.size(); j++) {
+      ImGui::TableNextRow();
+      for (int i = 0; i < Nx; i++) {
+        ImGui::TableNextColumn();
+
+        auto strId = toString(j) + "x" + toString(i);
+        if (j >= 0) {
+          auto &pi = db.productTemplate[j];
+          if (i == 0) {
+            ImGui::Text("%2d", j + 1);
+          } else if (i == 1) {
+            ImGui::Text(pi->name.c_str());
+          } else if (i == 2) {
+            ImGui::SetNextItemWidth(150);
+            if (ImGui::InputInt(("##dataEdit" + strId).c_str(), &quantities[j], 1, 10)) {
+              quantities[j] = max(quantities[j], 0);
+            }
+          } else if (i == 3) {
+            ImGui::Text("%0.3f %2s", pi->unit.coef, pi->unit.name.data());
+          } else if (i == 4) {
+            ImGui::Text("%0.3f", pi->weight(quantities[j]));
+          } else if (i == 5) {
+            if (auto b = pi->batchEdit.lock()) ImGui::Text(editFmt, b->no);
+            else {
+              ImGui::Text("-----");
+              allowSave = false;
+            }
+          } else if (i == 6) {
+            if (auto b = pi->batchEdit.lock()) {
+              renderDateEntry(nullptr, b->exp, today, Color_White, nullptr);
+            } else {
+              ImGui::Text("-----");
+            }
+          }
+        } else {
+          ImGui::TextColored(Color_Red, columnInfo[i].c_str());
+        }
+
+      }
+    }
+    ImGui::EndTable();
+  }
+
+  bool atLeastOneFilled = false;
+  for (auto &[j, q] : quantities) if (q > 0) atLeastOneFilled = true;
+
+  Set<ProductTemplate> noBatchSet;
+  for (auto &p : db.productTemplate) {
+    if (p->batchEdit.expired()) noBatchSet.insert(p);
+  }
+
+  allowSave = allowSave && atLeastOneFilled;
+  allowSave = allowSave && (receiverEdit.getText().length() > 0);
+  allowSave = allowSave && noBatchSet.empty();
+
+  auto &style = ImGui::GetStyle();
+  if (!allowSave) {
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, style.Colors[ImGuiCol_Button]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, style.Colors[ImGuiCol_Button]);
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+  }
+  bool saveDoc = ImGui::Button("Save##Doc");
+  if (!allowSave) {
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar();
+  }
+  if (ImGui::IsItemHovered()) {
+    if (!allowSave) {
+      String err;
+      if (receiverEdit.getText().empty()) err += u8"Липсва получател\n";
+      if (!atLeastOneFilled) err += u8"Няма въведено количество\n";
+      for (auto &p : noBatchSet) {
+        err += u8"Продукт " + p->name + u8" няма партида\n";
+      }
+      ImTooltip(Color_Red, err.c_str());
+    }
+  }
+
+  if (allowSave && saveDoc) {
+    TradeDoc td;
+
+    for (size_t i = 0; i < db.productTemplate.size(); i++) {
+      auto &pi = db.productTemplate[i];
+
+      auto b = pi->batchEdit.lock();
+      Product tp;
+      tp.name = pi->name;
+      tp.batch = pi->batch;
+      tp.unit = pi->unit;
+      tp.quantity = max(quantities[i], 0);
+
+      td.products.push_back(std::move(tp));
+    }
+    td.recipient = receiverEdit.getText();
+    td.no = db.docNumber;
+    td.date = db.docDate;
+
+    if (db.saveDoc(td)) {
+      db.add(td);
+      db.docNumber++;
+      db.docDate = today;
+      receiverEdit.clearText();
+      quantities.clear();
+    }
+  }
+}
+
+template<class T> using RMap = Map<int, T, std::greater<int>>;
 void IMainWindow::renderDatabase() {
-  for (auto &[year, mdb] : database.db) {
-    if (!ImGui::TreeNodeEx(toString(year).c_str(), ImGuiTreeNodeFlags_OpenOnArrow)) continue;
+  Scope winSG([] { ImGui::End(); });
+  if (!ImGui::Begin("Database##dbViewWin")) {
+    return;
+  }
 
-    for (auto &[month, ddb] : mdb) {
+  ImGui::Text(u8"Филтър");
+  ImGui::Indent();
+
+  static bool filterByDate = false;
+  ImGui::Checkbox(u8"По дата", &filterByDate);
+
+  static ImDatePicker startDate, endDate;
+  if (filterByDate) {
+    ImGui::Text(u8"От: "); ImGui::SameLine();
+    startDate.render("filterBegDate");
+
+    ImGui::Text(u8"До: "); ImGui::SameLine();
+    endDate.render("filterEndDate");
+  }
+
+  static char dbFilter[512];
+  ImGui::Text(u8"Получател: "); ImGui::SameLine();
+  ImGui::InputText("##dbFilter", dbFilter, sizeof(dbFilter));
+  size_t filterLen = strlen(dbFilter);
+
+  ImGui::Unindent();
+  ImGui::Separator();
+
+  RMap<RMap<RMap<Array<TradeDoc *>>>> dates;
+  for (auto &[date, docs] : db.docs) {
+    if (filterByDate) {
+      if (date < startDate.getSelection() || date > endDate.getSelection()) {
+        continue;
+      }
+    }
+    for (auto &td : docs) {
+      if (filterLen > 0) {
+        if (td.recipient.find(dbFilter) == String::npos) continue;
+      }
+
+      dates[date.year()][date.month()][date.day()].push_back(&td);
+    }
+  }
+
+  char noFmt[32];
+  SPRINTF(noFmt, u8"   №: %%0%d" PRId64, *db.docNumLeadZero);
+
+  uint32_t treeFlags = ImGuiTreeNodeFlags_OpenOnArrow;
+  static bool firstLoad = true;
+  if (firstLoad) {
+    treeFlags |= ImGuiTreeNodeFlags_DefaultOpen;
+    //firstLoad = false;
+  }
+
+  for (auto &[year, monthDays] : dates) {
+    if (!ImGui::TreeNodeEx(toString(year).c_str(), treeFlags)) continue;
+
+    for (auto &[month, days] : monthDays) {
       auto dName = ImDatePicker::getShortMonthName(month);
-      if (!ImGui::TreeNodeEx(dName, ImGuiTreeNodeFlags_OpenOnArrow)) continue;
+      if (!ImGui::TreeNodeEx(dName, treeFlags)) continue;
 
-      for (auto &[day, db] : ddb) {
-        if (!ImGui::TreeNodeEx(toString(day).c_str(), ImGuiTreeNodeFlags_OpenOnArrow)) continue;
+      for (auto &[day, docs] : days) {
+        if (!ImGui::TreeNodeEx(toString(day).c_str(), treeFlags)) continue;
 
-        for (auto &[no, td] : db) {
-          ImGui::Selectable(toString(no).c_str());
+        for (auto &td : docs) {
+          bool isSel = selectedDocs.count(td);
+          ImGui::Selectable(td->recipient.c_str(), &isSel);
+          if (ImGui::IsItemHovered()) {
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+              if (!docView.count(td)) {
+                docView[td] = TradeDocView(db, *td, mainWinViewID, &columnInfo);
+              }
+              docView[td].focus();
+            }
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+              if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl)) {
+                if (selectedDocs.count(td)) selectedDocs.erase(td);
+                else selectedDocs.insert(td);
+              } else {
+                selectedDocs.clear();
+                selectedDocs.insert(td);
+              }
+            }
+
+            ImGui::BeginTooltip();
+              ImGui::Text(u8"Дата: %s", td->date.str(DateFormat::SNamedDMY).c_str());
+              char tmp[128]; SPRINTF(tmp, noFmt, td->no);
+              ImGui::Text(tmp);
+            ImGui::EndTooltip();
+          }
         }
 
         ImGui::TreePop(); // day
       }
-
       ImGui::TreePop(); // month
     }
-
     ImGui::TreePop(); // year
+  }
+
+  if (ImGui::IsWindowFocused() && selectedDocs.size()) {
+    if ((ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+         ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))) {
+      TradeDocView *tdv = nullptr;
+      for (auto td : selectedDocs) {
+        if (docView.count(td)) continue;
+        docView[td] = TradeDocView(db, *td, mainWinViewID, &columnInfo);
+        tdv = &docView[td];
+      }
+      if (tdv) tdv->focus();
+    }
+  }
+
+  if (ImGui::BeginPopupContextWindow("##dbCtxMenu")) {
+    ImGui::PushStyleColor(ImGuiCol_Button, vec4(0));
+    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, vec2(0, 0));
+    vec2 btnSz = vec2(150, 0);
+    if (selectedDocs.empty()) {
+      if (ImGui::Button("Select all##dbCtxMenu", btnSz)) {
+        for (auto &[year, monthDays] : dates) {
+          for (auto &[month, days] : monthDays) {
+            for (auto &[day, docs] : days) {
+              for (auto &td : docs) selectedDocs.insert(td);
+        }}}}
+    } else {
+      if (ImGui::Button("Deselect##dbCtxMenu", btnSz)) {
+        selectedDocs.clear();
+      }
+
+      ImGui::Separator();
+      if (ImGui::Button("Open##dbCtxMenu", btnSz)) {
+        TradeDocView *tdv = nullptr;
+        for (auto td : selectedDocs) {
+          if (docView.count(td)) continue;
+          docView[td] = TradeDocView(db, *td, mainWinViewID, &columnInfo);
+          tdv = &docView[td];
+        }
+        if (tdv) tdv->focus();
+      }
+      ImGui::Separator();
+      if (ImGui::Button("Print##dbCtxMenu", btnSz)) {
+        Array<TradeDoc *> docs;
+        for (auto &d : selectedDocs) docs.push_back(d);
+        db.printerSettings.print(docs, false);
+      }
+      if (ImGui::Button("Print Setup##dbCtxMenu", btnSz)) {
+        Array<TradeDoc *> docs;
+        for (auto &d : selectedDocs) docs.push_back(d);
+        db.printerSettings.print(docs, true);
+      }
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+    ImGui::EndPopup();
   }
 }
 
+void IMainWindow::renderSettings() {
+  if (!openSettings) {
+    productSettings.close();
+    batchSettings.close();
+    return;
+  }
 
-bool IMainWindow::New() {
-  return true;
+  uint32_t winFlags = ImGuiWindowFlags_NoCollapse |
+                      ImGuiWindowFlags_NoDocking;
+  if (ImGui::Begin("Product batches", &openSettings, winFlags)) {
+    if (ImGui::BeginTabBar("##settingsTabBar")) {
+      if (ImGui::BeginTabItem(u8"Партиди##settings")) {
+        batchSettings.render();
+        ImGui::EndTabItem();
+      }
+      if (ImGui::BeginTabItem(u8"Продукти##settings")) {
+        productSettings.render();
+        ImGui::EndTabItem();
+      }
+      ImGui::EndTabBar();
+    }
+  }
+  ImGui::End();
 }
-bool IMainWindow::Save() {
-  return true;
-}
-bool IMainWindow::Open() {
-  return true;
-}
-void IMainWindow::Close() {
 
-}

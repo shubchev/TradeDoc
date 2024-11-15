@@ -11,30 +11,39 @@ enum class ImDatePickerResult {
 
 class ImDatePicker {
 protected:
-  CalendarTime date;
-  String format = "%d/%m/%Y";
-  bool openPopup = false;
+  Color buttonTextColor = Color_White;
+  CalendarDate date;
+  CalendarDate viewDate;
+  DateFormat format = DateFormat::DMY;
   bool mondayFirst = true;
+  bool opened = false;
   bool openFlag = false;
+  bool closeFlag = false;
+
+  String dateText;
+  String btnName;
+  String popName;
+  Rect btnRect;
+  vec2 popSize;
 
 public:
   ImDatePicker();
 
   // Default format is "%d/%m/%Y"
-  bool setFormat(const String &format);
+  void setFormat(DateFormat format);
   void setFirstDaySunday(bool yes);
-  bool setCurrentDate(const CalendarTime &date);
+  void setButtonTextColor(const Color &color);
+  bool setCurrentDate(const CalendarDate &date);
 
   void open();
   void close();
 
   ImDatePickerResult render(const String &label, bool closeWhenMouseLeavesIt = true);
 
-  CalendarTime getSelection() const;
+  CalendarDate getSelection() const;
 
-  static CalendarTime getToday();
-  static const char *getShortMonthName(const CalendarTime &date);
+  static const char *getShortMonthName(const CalendarDate &date);
   static const char *getShortMonthName(int month);
-  static const char *getLongMonthName(const CalendarTime &date);
+  static const char *getLongMonthName(const CalendarDate &date);
   static const char *getLongMonthName(int month);
 };

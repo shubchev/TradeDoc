@@ -31,21 +31,30 @@ file(GLOB_RECURSE SRC_FILES src/*.cc src/*.c src/*.cpp)
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${HDR_FILES})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SRC_FILES})
 
+
 add_executable(TradeDoc WIN32
     ${HDR_FILES}
     ${SRC_FILES}
+    src/TradeDoc.rc
 )
+
+add_dependencies(TradeDoc
+    cpp-utils)
 
 target_compile_definitions(TradeDoc PUBLIC
     HOST_COMPILE
 )
 
+set(ZCONF_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/build_out/external/cpp-utils/external/zlib")
+set(JCONFIG_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/build_out/external/cpp-utils/external/zlib")
+
 target_include_directories(TradeDoc PUBLIC
-    D:/workspace/cpp-utils/install/include
+    ${PROJECT_SOURCE_DIR}/external/cpp-utils/src/include
+	${ZCONF_INCLUDE_DIRS}
 )
 
 target_link_directories(TradeDoc PUBLIC
-    D:/workspace/cpp-utils/install/lib/${CONFIGURATION_TYPE}
+    ${PROJECT_SOURCE_DIR}/external/cpp-utils/install/lib/${CONFIGURATION_TYPE}
     ${OpenCL_INCLUDE_DIR}
 )
 
@@ -59,3 +68,6 @@ target_link_libraries(TradeDoc
 	OpenGL32.lib
 	${OpenCL_LIBRARY}
 )
+
+
+add_subdirectory(external/cpp-utils EXCLUDE_FROM_ALL)

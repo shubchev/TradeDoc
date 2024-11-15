@@ -16,7 +16,7 @@ struct ImGuiInputTextCallbackData;
 
 class ImTextField {
 protected:
-  char buf[1025];
+  String buf;
   ImTextFieldFormat format = ImTextFieldFormat::All;
   bool focused = false;
   bool setFocus = false;
@@ -29,9 +29,11 @@ protected:
 public:
   ImTextField();
 
+  ImTextFieldFormat getFormat() const { return format; }
   bool setFormat(ImTextFieldFormat format);
   bool setText(const String &str);
   bool setText(const char *fmt, ...);
+  void clearText();
 
   bool render(const String &label);
 

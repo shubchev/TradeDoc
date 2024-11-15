@@ -3,7 +3,9 @@
 #include "common.h"
 #include "imgui_addons/ImTextField.h"
 #include "imgui_addons/ImDatePicker.h"
-#include "TradeDocument.h"
+#include "TradeDocumentView.h"
+#include "BatchSettings.h"
+#include "ProductSettings.h"
 
 DefineHandle(IMainWindow, MainWindow);
 class IMainWindow : public OnGLWindowEvent {
@@ -12,24 +14,29 @@ protected:
 
   WString name = L"Търговски документ";
 
+  // product helpers
+  Array<String> columnInfo;
+  bool openSettings = false;
+  BatchSettings batchSettings;
+  ProductSettings productSettings;
+
+  USet<TradeDoc *> selectedDocs;
+
+  // new doc helpers
   bool isDocNumberEdited = false;
-  ImTextField docNumberEdit;
-  int64_t docNumber = 0;
-  int docNumLeadZero = 9;
+  int64_t docNumberEdit = 0;
 
   bool isDocDateEdited = false;
-  CalendarTime docDate;
   ImDatePicker docDatePicker;
 
-  String docReceiver;
+  ImTextField receiverEdit;
 
+  Map<int, int> quantities;
 
-  Map<int, Map<int, ImTextField>> docProdTextField;
-  Map<int, Map<int, ImDatePicker>> docProdValidity;
+  // database
+  TradeDB db;
 
-  TradeDB database;
-  TradeDoc doc;
-
+  // rendering
   void DockSpaceOverViewport();
   uint32_t mainWinViewID = 0;
   uint32_t dbViewID = 0;
@@ -45,19 +52,18 @@ protected:
   void onKeyDown(KeyButton btn, const Array<KeyButton> &mods) override;
 
   void render();
+  void renderNewDoc();
   void renderDatabase();
+  void renderSettings();
+
+  Map<TradeDoc *, TradeDocView> docView;
 
 public:
-  IMainWindow();
+  IMainWindow(Array<uint8_t> &fontData);
   virtual ~IMainWindow();
 
   int run();
   bool isRunning() const { return running; }
 
-  bool New();
-  bool Save();
-  bool Open();
-  void Close();
-
-  static MainWindow create();
+  static MainWindow create(Array<uint8_t> &fontData);
 };

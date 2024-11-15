@@ -5,7 +5,8 @@
 #include <ctype.h>
 
 ImTextField::ImTextField() {
-  MemSet(buf, 0, sizeof(buf));
+  buf.resize(1025);
+  MemSet(buf.data(), 0, buf.size());
 }
 
 bool ImTextField::setFormat(ImTextFieldFormat fmt) {
@@ -14,33 +15,38 @@ bool ImTextField::setFormat(ImTextFieldFormat fmt) {
 }
 
 bool ImTextField::setText(const String &t) {
-  strncpy_s(buf, t.c_str(), sizeof(buf) - 1);
-  buf[sizeof(buf) - 1] = 0;
+  MemCopy(buf.data(), t.data(), min(buf.size(), t.size()));
+  buf.back() = 0;
   return true;
 }
 
 bool ImTextField::setText(const char *fmt, ...) {
   va_list vl;
   va_start(vl, fmt);
-  vsnprintf_s(buf, sizeof(buf), fmt, vl);
+  vsnprintf(buf.data(), buf.size(), fmt, vl);
   va_end(vl);
-  buf[sizeof(buf) - 1] = 0;
+  buf.back() = 0;
   return true;
 }
 
+void ImTextField::clearText() {
+  MemSet(buf.data(), 0, buf.size());
+}
+
 String ImTextField::getText() const {
-  return String(buf);
+  return String(buf.c_str());
 }
 
 void ImTextField::focus() {
   setFocus = true;
 }
 
-bool isReal(const char *str, bool positiveOnly) {
+bool isReal(const String &str, bool positiveOnly) {
   auto ucStr = toUString(str);
   int dots = 0;
   for (size_t i = 0; i < ucStr.length() && dots <= 1; i++) {
     auto c = ucStr[i];
+    if (c == 0) break;
     if (c < 256 && isdigit(c)) continue;
     if (c == '.') { dots++; continue; }
     if (i == 0) {
@@ -52,10 +58,11 @@ bool isReal(const char *str, bool positiveOnly) {
   return dots <= 1;
 }
 
-bool isInteger(const char *str, bool positiveOnly) {
+bool isInteger(const String &str, bool positiveOnly) {
   auto ucStr = toUString(str);
   for (size_t i = 0; i < ucStr.length(); i++) {
     auto c = ucStr[i];
+    if (c == 0) break;
     if (c < 256 && isdigit(c)) continue;
     if (i == 0) {
       if (c == '+') continue;
@@ -103,8 +110,6 @@ int ImTextField::FilterPositiveInteger(ImGuiInputTextCallbackData *data) {
 }
 
 bool ImTextField::render(const String &label) {
-  bool ret = true;
-
   if (setFocus) {
     ImGui::SetKeyboardFocusHere(0);
     focused = true;
@@ -113,56 +118,38 @@ bool ImTextField::render(const String &label) {
 
   switch (format) {
     case ImTextFieldFormat::All:
-      ret = ImGui::InputText(label.c_str(), buf, sizeof(buf),
-                       ImGuiInputTextFlags_EnterReturnsTrue);
+      ImGui::InputText(label.c_str(), buf.data(), buf.size());
       break;
     case ImTextFieldFormat::Password:
-      ret = ImGui::InputText(label.c_str(), buf, sizeof(buf),
-                       ImGuiInputTextFlags_EnterReturnsTrue |
+      ImGui::InputText(label.c_str(), buf.data(), buf.size(),
                        ImGuiInputTextFlags_Password);
       break;
     case ImTextFieldFormat::Number:
-      ret = ImGui::InputText(label.c_str(), buf, sizeof(buf),
+      ImGui::InputText(label.c_str(), buf.data(), buf.size(),
                        ImGuiInputTextFlags_CallbackCharFilter |
-                       ImGuiInputTextFlags_CallbackAlways |
-                       ImGuiInputTextFlags_EnterReturnsTrue,
+                       ImGuiInputTextFlags_CallbackAlways,
                        FilterNumber, this);
       break;
     case ImTextFieldFormat::PositiveNumber:
-      ret = ImGui::InputText(label.c_str(), buf, sizeof(buf),
+      ImGui::InputText(label.c_str(), buf.data(), buf.size(),
                        ImGuiInputTextFlags_CallbackCharFilter |
-                       ImGuiInputTextFlags_CallbackAlways |
-                       ImGuiInputTextFlags_EnterReturnsTrue,
+                       ImGuiInputTextFlags_CallbackAlways,
                        FilterPositiveNumber, this);
       break;
     case ImTextFieldFormat::Integer:
-      ret = ImGui::InputText(label.c_str(), buf, sizeof(buf),
+      ImGui::InputText(label.c_str(), buf.data(), buf.size(),
                        ImGuiInputTextFlags_CallbackCharFilter |
-                       ImGuiInputTextFlags_CallbackAlways |
-                       ImGuiInputTextFlags_EnterReturnsTrue,
+                       ImGuiInputTextFlags_CallbackAlways,
                        FilterInteger, this);
       break;
     case ImTextFieldFormat::PositiveInteger:
-      ret = ImGui::InputText(label.c_str(), buf, sizeof(buf),
+      ImGui::InputText(label.c_str(), buf.data(), buf.size(),
                        ImGuiInputTextFlags_CallbackCharFilter |
-                       ImGuiInputTextFlags_CallbackAlways |
-                       ImGuiInputTextFlags_EnterReturnsTrue,
+                       ImGuiInputTextFlags_CallbackAlways,
                        FilterPositiveInteger, this);
       break;
     default: return false;
   }
 
-  vec2 pos = ImGui::GetItemRectMin();
-  vec2 size = ImGui::GetItemRectSize();
-
-  if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-    auto &io = ImGui::GetIO();
-    vec2 mp = io.MousePos;
-    if (!(all(greaterThanEqual(mp, pos)) && all(lessThanEqual(mp, pos + size)))) {
-      focused = false;
-      setText(toString(ret));
-    }
-  }
-
-  return ret;
+  return ImGui::IsItemDeactivatedAfterEdit();
 }

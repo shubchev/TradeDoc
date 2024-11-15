@@ -46,23 +46,28 @@ target_compile_definitions(TradeDoc PUBLIC
 )
 
 set(ZCONF_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/build_out/external/cpp-utils/external/zlib")
-set(JCONFIG_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/build_out/external/cpp-utils/external/zlib")
 
 target_include_directories(TradeDoc PUBLIC
-    ${PROJECT_SOURCE_DIR}/external/cpp-utils/src/include
+    ${PROJECT_SOURCE_DIR}/external/cpp-utils/external/glm
+    ${PROJECT_SOURCE_DIR}/external/cpp-utils/external/GLFW/include
+    ${PROJECT_SOURCE_DIR}/external/cpp-utils/lib/include
 	${ZCONF_INCLUDE_DIRS}
 )
 
 target_link_directories(TradeDoc PUBLIC
-    ${PROJECT_SOURCE_DIR}/external/cpp-utils/install/lib/${CONFIGURATION_TYPE}
+    ${CMAKE_BINARY_DIR}/external/cpp-utils/lib/${CONFIGURATION_TYPE}
+    ${CMAKE_BINARY_DIR}/external/cpp-utils/external/glfw/src/${CONFIGURATION_TYPE}
+    ${CMAKE_BINARY_DIR}/external/cpp-utils/external/base64/${CONFIGURATION_TYPE}
+    ${CMAKE_BINARY_DIR}/external/cpp-utils/external/zlib/${CONFIGURATION_TYPE}
+    ${PROJECT_SOURCE_DIR}/external/cpp-utils/external/jpeg-bins/lib/win10/x64/${CONFIGURATION_TYPE}
     ${OpenCL_INCLUDE_DIR}
 )
 
 target_link_libraries(TradeDoc
     cpp-utils.lib
     glfw3.lib
-	turbojpeg-static.lib
 	zlibstatic${DEBUG_POSTFIX}.lib
+    turbojpeg-static.lib
     Wininet.lib
 	base64.lib
 	OpenGL32.lib

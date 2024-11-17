@@ -46,7 +46,7 @@ bool IPrinter::init() {
     return false;
   }
   prop.dmPaperSize = DMPAPER_A4;
-  prop.dmOrientation = DMORIENT_LANDSCAPE;
+  prop.dmOrientation = DMORIENT_PORTRAIT;
 
   bool success = updateProps();
   close();

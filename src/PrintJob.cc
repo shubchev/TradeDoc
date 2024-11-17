@@ -252,10 +252,15 @@ public:
     tableWidthMargins[Nx - 4] = tableWidthMargins[Nx - 3] - getMaxWidth(Nx - 4);
     tableWidthMargins[     1] = tableWidthMargins[     0] + getMaxWidth(     0);
 
-    for (int j = 0; j <= Ny; j++) {
-      for (int i = 0; i < Nx; i++) {
-        tableStrings[j][i].calcXPos(tableWidthMargins[i],
-                                    tableWidthMargins[i + 1] - tableWidthMargins[i]);
+    {
+      int j = 0;
+      for (auto &row : tableStrings) {
+        int i = 0;
+        for (auto &str : row) {
+          str.calcXPos(tableWidthMargins[i], tableWidthMargins[i + 1] - tableWidthMargins[i]);
+          i++;
+        }
+        j++;
       }
     }
 
@@ -266,15 +271,20 @@ public:
       return h;
     };
     tableHeightMargins.push_back(toStr.pos.y + toStr.size.y * 1.5f);
-    for (int j = 0; j <= Ny; j++) {
+    for (int j = 0; j < Ny; j++) {
       tableHeightMargins.push_back(tableHeightMargins.back() + getMaxHeight(j));
     }
     tableHeightMargins.push_back(tableHeightMargins.back() + getMaxHeight(Ny));
 
-    for (int j = 0; j <= Ny; j++) {
-      for (int i = 0; i < Nx; i++) {
-        tableStrings[j][i].calcYPos(tableHeightMargins[j],
-                                    tableHeightMargins[j + 1] - tableHeightMargins[j]);
+    {
+      int j = 0;
+      for (auto &row : tableStrings) {
+        int i = 0;
+        for (auto &str : row) {
+          str.calcYPos(tableHeightMargins[j], tableHeightMargins[j + 1] - tableHeightMargins[j]);
+          i++;
+        }
+        j++;
       }
     }
 

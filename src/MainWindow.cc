@@ -1,5 +1,27 @@
 ﻿#include "MainWindow.h"
-#include <inttypes.h>
+#include "Themes.h"
+
+void *IMainWindow::iniReadOpenFn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, const char *name) {
+  auto pThis = (IMainWindow *)handler->UserData;
+
+  return (void *)1; // just to allow call of ReadLineFn
+}
+
+void IMainWindow::iniReadLineFn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, void *entry, const char *line) {
+  auto pThis = (IMainWindow *)handler->UserData;
+  if (strstr(line, "ThemeIndex")) {
+    int index = 0;
+    if (SSCANF(line, "ThemeIndex = %d", &index) == 1) {
+      setTheme(&pThis->themeIdx, index);
+    }
+  }
+};
+void IMainWindow::iniWriteAllFn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, ImGuiTextBuffer *out_buf) {
+  auto pThis = (IMainWindow *)handler->UserData;
+  out_buf->appendf("[Theme][Data]\n");
+  out_buf->appendf("ThemeIndex = %d", pThis->themeIdx);
+};
+
 
 IMainWindow::IMainWindow(Array<uint8_t> &fontData)
   : batchSettings(db), productSettings(db) {
@@ -40,56 +62,25 @@ IMainWindow::IMainWindow(Array<uint8_t> &fontData)
   db.docNumber = db.getMaxDocNo() + 1;
 
 
-          /*auto doc = &db.docs.begin()->second[0];
-          auto jobs = db.printerSettings.print({ doc }, false);
-
-          for (auto &job : jobs) {
-            job->wait(1000);
-          }
-          GL::notifyWindowClose();*/
-
-
-  /*if (db.batchTemplate.empty()) {
-    db.batchTemplate = {
-      IBatchTemplate::create(),
-    };
-    if (!db.saveBatches()) {
-      db.removeTmpWorkDir();
-      throw RuntimeError(db.lastError);
-    }
-  }
-
-  if (db.productTemplate.empty()) {
-    auto today = CalendarDate::today();
-    db.productTemplate = {
-      ProductTemplate(u8"Масло от Бял Трън   Ф.", TradeUnit(u8"л", 1.000f)),
-      ProductTemplate(u8"Масло от Бял Трън   Ф.", TradeUnit(u8"л", 0.500f)),
-      ProductTemplate(u8"Масло от Бял Трън   Ф.", TradeUnit(u8"л", 0.250f)),
-      ProductTemplate(u8"Масло от Бял Трън Н.Ф.", TradeUnit(u8"л", 0.750f)),
-      ProductTemplate(u8"Масло от Бял Трън Н.Ф.", TradeUnit(u8"л", 0.250f)),
-
-      ProductTemplate(u8"Брашно от Бял Трън", TradeUnit(u8"кг", 1.000f)),
-      ProductTemplate(u8"Брашно от Бял Трън", TradeUnit(u8"кг", 0.500f)),
-      ProductTemplate(u8"Брашно от Бял Трън", TradeUnit(u8"кг", 0.250f)),
-
-      ProductTemplate(u8"Тахан от Бял Трън", TradeUnit(u8"кг", 0.300f)),
-    };
-    for (auto &p : db.productTemplate) {
-      p.db = &db;
-      p.batch = db.batchTemplate[0];
-    }
-    if (!db.saveProducts()) {
-      db.removeTmpWorkDir();
-      throw RuntimeError(db.lastError);
-    }
-  }*/
-
   auto glInitGUI = [&] () {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    initThemes();
+
+    // Add .ini handle for UserData type
+    ImGuiSettingsHandler ini_handler;
+    ini_handler.TypeName = "Theme";
+    ini_handler.TypeHash = ImHashStr("Theme");
+    ini_handler.ReadOpenFn = iniReadOpenFn;
+    ini_handler.ReadLineFn = iniReadLineFn;
+    ini_handler.WriteAllFn = iniWriteAllFn;
+    ini_handler.UserData = this;
+    ImGui::AddSettingsHandler(&ini_handler);
+
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.IniFilename = "imgui.ini";
+    io.IniFilename = "settings.ini";
+
 
     static Array<ImWchar> glyphs;
     auto cyrillic = io.Fonts->GetGlyphRangesCyrillic();
@@ -99,14 +90,8 @@ IMainWindow::IMainWindow(Array<uint8_t> &fontData)
     glyphs.push_back(0x2116); glyphs.push_back(0x2116);
     glyphs.push_back(0x0);
 
-    // TODO: load from resource file
     io.Fonts->AddFontFromMemoryTTF(fontData.data(), (int)fontData.size(), 20,
                                    nullptr, glyphs.data());
-    /*io.Fonts->AddFontFromFileTTF("D:\\workspace\\SHGE\\resources\\fonts\\FreeMono.ttf", 20,
-                                 nullptr, glyphs.data());*/
-
-    //auto &style = ImGui::GetStyle();
-    //style.Colors[ImGuiCol_WindowBg] = Color_Grey;
 
     ImGui_ImplGlfw_InitForOpenGL((GLFWwindow *)GL::getGLWindowHandle(), true);
     const char *glsl_version = "#version 400";
@@ -293,8 +278,28 @@ void IMainWindow::render() {
         }
         ImGui::EndMenu();
       }
-      if (ImGui::MenuItem("Theme")) {
-
+      if (ImGui::BeginMenu("Theme")) {
+        int index = -1;
+        if (ImGui::MenuItem("Classic")) {
+          index = 0;
+        }
+        if (ImGui::MenuItem("Dark")) {
+          index = 1;
+        }
+        if (ImGui::MenuItem("Light")) {
+          index = 2;
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Windows")) {
+          index = 3;
+        }
+        if (ImGui::MenuItem("Pink")) {
+          index = 4;
+        }
+        ImGui::EndMenu();
+        if (setTheme(&themeIdx, index)) {
+          ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
+        }
       }
 
 
@@ -386,6 +391,9 @@ void IMainWindow::renderNewDoc() {
       }
       isDocNumberEdited = false;
     }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+      isDocNumberEdited = false;
+    }
   } else {
     char fmt[10];
     SPRINTF(fmt, "%%0%dd", *db.docNumLeadZero);
@@ -396,7 +404,7 @@ void IMainWindow::renderNewDoc() {
         docNumberEdit = db.docNumber;
       } else {
         ImGui::BeginTooltip();
-        ImGui::Text("Double click to change.\nPress ENTER to accept new number");
+        ImGui::Text("Double click to change.");
         ImGui::EndTooltip();
       }
     }
@@ -742,4 +750,3 @@ void IMainWindow::renderSettings() {
   }
   ImGui::End();
 }
-

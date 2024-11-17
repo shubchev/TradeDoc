@@ -10,6 +10,14 @@
 DefineHandle(IMainWindow, MainWindow);
 class IMainWindow : public OnGLWindowEvent {
 protected:
+  // Read: Called when entering into a new ini entry e.g. "[Window][Name]"
+  static void *iniReadOpenFn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, const char *name);
+  // Read: Called for every line of text within an ini entry
+  static void  iniReadLineFn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, void *entry, const char *line);
+  // Write: Output every entries into 'out_buf'
+  static void  iniWriteAllFn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, ImGuiTextBuffer *out_buf);
+  int themeIdx = 0;
+
   bool running = true;
 
   WString name = L"Търговски документ";

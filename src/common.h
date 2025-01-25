@@ -13,3 +13,4 @@
 extern uintptr_t g_hInst;
 extern void ImTooltip(const Color &color, const char *fmt, ...);
 extern void ImTooltip(const char *fmt, ...);
+extern bool ImInputInt(const char *label, int *v, int step, int step_fast, ImGuiInputTextFlags flags = 0);

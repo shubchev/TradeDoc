@@ -475,7 +475,7 @@ void IMainWindow::renderNewDoc() {
             ImGui::Text(pi->name.c_str());
           } else if (i == 2) {
             ImGui::SetNextItemWidth(150);
-            if (ImGui::InputInt(("##dataEdit" + strId).c_str(), &quantities[j], 1, 10)) {
+            if (ImInputInt(("##dataEdit" + strId).c_str(), &quantities[j], 1, 10)) {
               quantities[j] = max(quantities[j], 0);
             }
           } else if (i == 3) {

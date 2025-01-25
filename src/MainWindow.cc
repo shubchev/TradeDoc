@@ -624,6 +624,8 @@ void IMainWindow::renderDatabase() {
     //firstLoad = false;
   }
 
+  Map<int, TradeDoc *> docIndex;
+  int docIdx = 0;
   for (auto &[year, monthDays] : dates) {
     if (!ImGui::TreeNodeEx(toString(year).c_str(), treeFlags)) continue;
 
@@ -635,6 +637,8 @@ void IMainWindow::renderDatabase() {
         if (!ImGui::TreeNodeEx(toString(day).c_str(), treeFlags)) continue;
 
         for (auto &td : docs) {
+          docIndex[docIdx++] = td;
+
           bool isSel = selectedDocs.count(td);
           ImGui::Selectable(td->recipient.c_str(), &isSel);
           if (ImGui::IsItemHovered()) {
@@ -645,7 +649,21 @@ void IMainWindow::renderDatabase() {
               docView[td].focus();
             }
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-              if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl)) {
+              bool shft = ImGui::IsKeyDown(ImGuiKey_LeftShift) ||
+                          ImGui::IsKeyDown(ImGuiKey_RightShift);
+              bool ctrl = ImGui::IsKeyDown(ImGuiKey_LeftCtrl) ||
+                          ImGui::IsKeyDown(ImGuiKey_RightCtrl);
+              if (shft) {
+                if (selectedDocStart < 0) {
+                  selectedDocStart = docIdx - 1;
+                } else if (selectedDocEnd < 0) {
+                  selectedDocEnd = docIdx - 1;
+                }
+              } else {
+                selectedDocStart = docIdx - 1;
+                selectedDocEnd = -1;
+              }
+              if (ctrl) {
                 if (selectedDocs.count(td)) selectedDocs.erase(td);
                 else selectedDocs.insert(td);
               } else {
@@ -667,6 +685,14 @@ void IMainWindow::renderDatabase() {
       ImGui::TreePop(); // month
     }
     ImGui::TreePop(); // year
+  }
+
+  if (selectedDocStart >= 0 && selectedDocEnd >= 0) {
+    auto Imin = min(selectedDocStart, selectedDocEnd);
+    auto Imax = max(selectedDocStart, selectedDocEnd);
+    for (int i = Imin; i <= Imax; i++) {
+      selectedDocs.insert(docIndex[i]);
+    }
   }
 
   if (ImGui::IsWindowFocused() && selectedDocs.size()) {

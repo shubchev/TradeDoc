@@ -29,6 +29,8 @@ protected:
   ProductSettings productSettings;
 
   USet<TradeDoc *> selectedDocs;
+  int selectedDocStart = -1;
+  int selectedDocEnd = -1;
 
   // new doc helpers
   bool isDocNumberEdited = false;
